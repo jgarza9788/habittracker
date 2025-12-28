@@ -1,0 +1,10 @@
+
+
+env/
+log/
+utils/__pycache__/
+config.json
+credentials.json
+data.json
+message.html
+jgarza-1609029185640-e61af0876b7e.json
