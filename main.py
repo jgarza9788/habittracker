@@ -69,40 +69,81 @@ class HabitTracker:
         self.credentials = DM(credentials_file,default={})
 
         self.gsheet_key = os.path.join(self.dir, 'jgarza-1609029185640-e61af0876b7e.json')
-        self.gsheet_id = "1gT_m6xnpEQ3YEIE44bwokKZJgsLn66nMo3MifTa4GGc"
+        # self.gsheet_id = "1gT_m6xnpEQ3YEIE44bwokKZJgsLn66nMo3MifTa4GGc"
+        self.gsheet_id = "1-b4xkSDxGgpuiPN-xBg4dkJ9HeA9iGba6kx9MsiieCQ"
 
         self.data = self.get_sheet_data()
+        self.data.drop(columns=['Month','Year'], inplace=True)
+        self.data = self.data.sort_values(by="Date", ascending=False)
 
-        self.data, self.habits = self.process_data(self.data)
-        self.data = self.data.sort_values(by="date", ascending=False)
+        self.habits = self.get_habits(self.data)
+        self.convert_to_int()
 
-        # self.data.to_csv(os.path.join(self.dir, 'habit_data_processed.csv'), index=False)
-
-
-        self.year_bars = self.data[self.habits].sum().reset_index()
-        self.year_bars.columns = ["Habit", "Sum"]
-        self.year_bars['Percent'] = self.year_bars['Sum'].apply(lambda x: f'{x/len(self.data):.2f}%')
-        self.year_bars['Bars'] = self.year_bars['Sum'].apply(lambda x: '|' + '█' * math.ceil((x/len(self.data))*25.0) + '░' * math.floor((1.0 - (x/len(self.data)))*25.0) + '|')
-        # self.year_bars['Bars'] = self.year_bars['Sum'].apply(lambda x: '🟩' * math.ceil((x/len(self.data))*20.0) + '🟥' * math.floor((1.0 - (x/len(self.data)))*20.0))
+        #convert Date to datetime
+        self.data["Date"] = pd.to_datetime(self.data["Date"], errors="coerce")
 
 
-        # self.data.to_csv(os.path.join(self.dir, 'habit_data_processed.csv'), index=False)
+        #filter 
+        today = pd.Timestamp.now().normalize()
+        # today = pd.Timestamp.now().normalize() + pd.Timedelta(days=14)
+        self.data = self.data[self.data["Date"] <= today]
 
         last_7 = pd.Timestamp.now().normalize() - pd.Timedelta(days=6)
-        self.data_last_week = self.data[self.data["date"] >= last_7]
-        self.data_last_week = self.data_last_week.sort_values(by="date", ascending=False)
+        self.data_week = self.data[self.data["Date"] >= last_7]
 
-        self.last_week_bars = self.data_last_week[self.habits].sum().reset_index()
-        self.last_week_bars.columns = ["Habit", "Sum"]
+        #year bars
+        self.bars_year = self.data[self.habits].sum().reset_index()
+        self.bars_year.columns = ["Habit", "Sum"]
+        self.bars_year['Percent'] = self.bars_year['Sum'].apply(lambda x: f'{x/len(self.data):.2f}%')
+        self.bars_year['Bars'] = self.bars_year['Sum'].apply(lambda x: '|' + '█' * math.ceil((x/len(self.data))*25.0) + '░' * math.floor((1.0 - (x/len(self.data)))*25.0) + '|')
 
-        week = max(7.0, len(self.data_last_week))
-        self.last_week_bars['Percent'] = self.last_week_bars['Sum'].apply(lambda x: f'{x/week:.2f}%')
-        self.last_week_bars['Bars'] = self.last_week_bars['Sum'].apply(lambda x: '|' + '█' * math.ceil((x/week)*25.0) + '░'* math.floor((1.0 - (x/week))*25.0) + '|')
-        # self.last_week_bars['Bars'] = self.last_week_bars['Sum'].apply(lambda x: '🟩' * math.ceil((x/7.0)*25.0) + '🟥'* math.floor((1.0 - (x/7.0))*25.0))
+        #last week bars
+        self.bars_week = self.data_week[self.habits].sum().reset_index()
+        self.bars_week.columns = ["Habit", "Sum"]
+        week = min(7.0, len(self.data_week))
+        self.bars_week['Percent'] = self.bars_week['Sum'].apply(lambda x: f'{x/week:.2f}%')
+        self.bars_week['Bars'] = self.bars_week['Sum'].apply(lambda x: '|' + '█' * math.ceil((x/week)*25.0) + '░'* math.floor((1.0 - (x/week))*25.0) + '|')   
+
+        # streaks
+        self.streaks = []
+        for habit in self.habits:
+            streak = self.get_streak(self.data[habit])
+            if streak > 1:
+                tier = ''
+                if streak >= 3:
+                    tier = '🔥 '
+                if streak >= 6:
+                    tier = '🌟 '
+                if streak >= 12:
+                    tier = '🏆 '
+                if streak >= 15:
+                    tier = '🚀 '
+                self.streaks.append((habit, streak, tier))
+
+        #negative streaks
+        self.neg_streaks = []
+        for habit in self.habits:
+            neg_streak = self.get_neg_streak(self.data[habit])
+            if neg_streak > 1:
+                tier = ''
+                if neg_streak >= 3:
+                    tier = '⚠️ '
+                if neg_streak >= 6:
+                    tier = '⛔ '
+                if neg_streak >= 12:
+                    tier = '❌ '
+                if neg_streak >= 15:
+                    tier = '💀 '
+                self.neg_streaks.append((habit, neg_streak, tier))
+
+        # print(self.data)
+        # print(self.habits)
+        # print(self.data_week)
+        # print(self.bars_year)
+        # print(self.bars_week)
 
 
         self.message = self.create_message()
-
         self.send_email()
 
         # self.logger.info(f"{self.message=}")
@@ -122,65 +163,23 @@ class HabitTracker:
         # print(sheet.get_all_values())
 
         return pd.DataFrame(sheet.get_all_records())
+    
+    def get_habits(self, df):
+        """ Get list of habits from data frame """
+        habits = df.columns.tolist()
+        habits.remove("Date")
+        # habits.remove("Month")
+        # habits.remove("Year")
+        return habits
 
-    def process_data(self, df):
-        """Process raw data into useful information.
-
-        - Parses Timestamp
-        - Coerces habit columns to 0/1 ints
-        - Dedups to the "best" row per day (max # of 1s; tie -> latest Timestamp)
-        - Fills missing days between min/max with 0s across all habit columns
-        """
-        if df is None or df.empty:
-            # Return an empty, well-formed frame if nothing came in
-            self.logger.error("No data to process.")
-            return pd.DataFrame()
-
-        df = df.copy()
-
-        # ---- Timestamp -> datetime ----
-        if "Timestamp" not in df.columns:
-            self.logger.error("Expected a 'Timestamp' column in df")
-            raise ValueError("Expected a 'Timestamp' column in df")
+    
+    def convert_to_int(self):
+        """ Convert habit columns to int """
+        for habit in self.habits:
+            # self.data[habit] = self.data[habit].astype(int)
+            self.data[habit] = self.data[habit].map({"TRUE":1, "FALSE":0})
 
 
-        df["Timestamp"] = pd.to_datetime(df["Timestamp"], errors="coerce")
-        df = df.dropna(subset=["Timestamp"]).reset_index(drop=True)
-
-        if df.empty:
-            self.logger.error("No data to process.")
-            return None, None
-        
-        df["date"] = df["Timestamp"].dt.normalize()
-
-        df = df.groupby("date", as_index=False)["Habits"].agg(lambda x: " ".join(x))
-
-        habits = df["Habits"].str.split(" ", expand=True).stack().reset_index(level=1, drop=True)
-        habits.name = "Habit"
-        habits = habits.unique().tolist()
-        habits = [habit.replace(",", "").replace(" ", "").strip() for habit in habits ]
-        habits = list(set(habits))
-        habits = [habit for habit in habits if habit != ""]
-        # habits = sorted(habits)
-        
-        for habit in habits:
-            # print(f'|{habit}|')
-            df[habit] = df["Habits"].apply(lambda x: 1 if habit in x else 0)
-            df[habit] = df[habit].fillna(0).astype(int)
-
-        df = df.drop(columns=["Habits"])
-
-        # ---- Fill missing days with 0s ----
-        start = df["date"].min()
-        end = df["date"].max()
-        all_days = pd.date_range(start, end, freq="D")
-
-        df = df.set_index("date").reindex(all_days)
-        df.index.name = "date"
-        df = df.reset_index(drop=False)
-        df = df.fillna(0)
-
-        return df, habits
 
     def get_streak(self, series: pd.Series) -> int:
         """ Get current streak for a habit series (1s and 0s) """
@@ -209,25 +208,11 @@ class HabitTracker:
 
         content = ''
 
-        habit_streaks = []
-        for habit in self.habits:
-            streak = self.get_streak(self.data[habit])
-            if streak > 1:
-                tier = ''
-                if streak >= 3:
-                    tier = '🔥 '
-                if streak >= 6:
-                    tier = '🌟 '
-                if streak >= 12:
-                    tier = '🏆 '
-                if streak >= 15:
-                    tier = '🚀 '
-                habit_streaks.append((habit, streak, tier))
 
-        if len(habit_streaks) > 0:
+        if len(self.streaks) > 0:
             content += '<h2>**Streaks**</h2>'
             content += '<table style="font-size: 18px;"  class="dataframe table table-striped table-hover table-bordered table-responsive">'
-            for habit, streak, tier in habit_streaks:
+            for habit, streak, tier in self.streaks:
                 content += f'''
                 <tr>
                     <td><b>{habit}</b></td>
@@ -238,26 +223,12 @@ class HabitTracker:
             content += '</table>'
             content += '<hr>'
 
-        negative_streaks = []
-        for habit in self.habits:
-            neg_streak = self.get_neg_streak(self.data[habit])
-            if neg_streak > 1:
-                tier = ''
-                if neg_streak >= 3:
-                    tier = '⚠️ '
-                if neg_streak >= 6:
-                    tier = '⛔ '
-                if neg_streak >= 12:
-                    tier = '❌ '
-                if neg_streak >= 15:
-                    tier = '💀 '
-                negative_streaks.append((habit, neg_streak, tier))
 
-        if len(negative_streaks) > 0:
+        if len(self.neg_streaks) > 0:
             content += '<div class=".text-danger">'
             content += '<h2>!!Negative Streaks!!</h2>'
             content += '<table style="font-size: 18px;"  class="dataframe table table-striped table-hover table-bordered table-responsive">'
-            for habit, streak, tier in negative_streaks:
+            for habit, streak, tier in self.neg_streaks:
                 content += f'''
                 <tr>
                     <td><b>{habit}</b></td>
@@ -271,25 +242,25 @@ class HabitTracker:
 
         content += '<h2>Habit Data (Last 7 Days)</h2>'
 
-        content += self.last_week_bars[["Habit", "Percent","Bars"]].to_html(
+        content += self.bars_week[["Habit", "Percent","Bars"]].to_html(
                                 classes='table table-striped table-hover table-bordered table-responsive', 
                                 index=False,
                                 border=0
                                 )
 
         content += '<hr>'
-        temp = self.data_last_week.to_html(
+        temp = self.data_week.to_html(
                                 classes='table table-striped table-hover table-bordered table-responsive', 
                                 index=False,
                                 border=0
                                 ) 
-        temp = temp.replace('>0.0<','>🟥<')
-        temp = temp.replace('>1.0<','>🟩<')
+        temp = temp.replace('>0<','>🟥<')
+        temp = temp.replace('>1<','>🟩<')
         content += temp
         content += '<hr>'
 
         content += '<h2>Habit Percents</h2>'
-        content += self.year_bars[["Habit", "Percent","Bars"]].to_html(
+        content += self.bars_year[["Habit", "Percent","Bars"]].to_html(
                                 classes='table table-striped table-hover table-bordered table-responsive', 
                                 index=False,
                                 border=0
@@ -300,8 +271,8 @@ class HabitTracker:
                                 index=False,
                                 border=0
                                 ) 
-        temp = temp.replace('>0.0<','>🟥<')
-        temp = temp.replace('>1.0<','>🟩<')
+        temp = temp.replace('>0<','>🟥<')
+        temp = temp.replace('>1<','>🟩<')
         content += temp
         content += '<hr>'
 
