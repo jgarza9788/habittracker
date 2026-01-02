@@ -76,8 +76,12 @@ class HabitTracker:
         self.data.drop(columns=['Month','Year'], inplace=True)
         self.data = self.data.sort_values(by="Date", ascending=False)
 
+        # print(self.data)
+
         self.habits = self.get_habits(self.data)
-        self.convert_to_int()
+        # self.convert_to_int()
+
+        # print(self.data)
 
         #convert Date to datetime
         self.data["Date"] = pd.to_datetime(self.data["Date"], errors="coerce")
@@ -94,15 +98,17 @@ class HabitTracker:
         #year bars
         self.bars_year = self.data[self.habits].sum().reset_index()
         self.bars_year.columns = ["Habit", "Sum"]
-        self.bars_year['Percent'] = self.bars_year['Sum'].apply(lambda x: f'{x/len(self.data):.2f}%')
-        self.bars_year['Bars'] = self.bars_year['Sum'].apply(lambda x: '|' + '█' * math.ceil((x/len(self.data))*25.0) + '░' * math.floor((1.0 - (x/len(self.data)))*25.0) + '|')
+        # self.bars_year["pSum"] = self.bars_year["Sum"].apply(lambda x: max(x,0))
+        # self.bars_year['Percent'] = self.bars_year['Sum'].apply(lambda x: f'{ max(x/len(self.data),0):.2f}%')
+        # self.bars_year['Bars'] = self.bars_year['pSum'].apply(lambda x: '|' + '█' * math.ceil((x/len(self.data))*25.0) + '░' * math.floor((1.0 - (x/len(self.data)))*25.0) + '|')
 
         #last week bars
         self.bars_week = self.data_week[self.habits].sum().reset_index()
         self.bars_week.columns = ["Habit", "Sum"]
-        week = min(7.0, len(self.data_week))
-        self.bars_week['Percent'] = self.bars_week['Sum'].apply(lambda x: f'{x/week:.2f}%')
-        self.bars_week['Bars'] = self.bars_week['Sum'].apply(lambda x: '|' + '█' * math.ceil((x/week)*25.0) + '░'* math.floor((1.0 - (x/week))*25.0) + '|')   
+        # self.bars_week["pSum"] = self.bars_week["Sum"].apply(lambda x: max(x,0))
+        # week = min(7.0, len(self.data_week))
+        # self.bars_week['Percent'] = self.bars_week['Sum'].apply(lambda x: f'{ x/week:.2f}%')
+        # self.bars_week['Bars'] = self.bars_week['pSum'].apply(lambda x: '|' + '█' * math.ceil((x/week)*25.0) + '░'* math.floor((1.0 - (x/week))*25.0) + '|')   
 
         # streaks
         self.streaks = []
@@ -136,12 +142,14 @@ class HabitTracker:
                     tier = '💀 '
                 self.neg_streaks.append((habit, neg_streak, tier))
 
+
+        # self.data.to_csv(os.path.join(self.dir,'data_year.csv'), index=False)
+
         # print(self.data)
         # print(self.habits)
         # print(self.data_week)
         # print(self.bars_year)
         # print(self.bars_week)
-
 
         self.message = self.create_message()
         self.send_email()
@@ -173,11 +181,12 @@ class HabitTracker:
         return habits
 
     
-    def convert_to_int(self):
-        """ Convert habit columns to int """
-        for habit in self.habits:
-            # self.data[habit] = self.data[habit].astype(int)
-            self.data[habit] = self.data[habit].map({"TRUE":1, "FALSE":0})
+    # def convert_to_int(self):
+    #     """ Convert habit columns to int """
+    #     for habit in self.habits:
+    #         # self.data[habit] = self.data[habit].astype(int)
+    #         # self.data[habit] = self.data[habit].map({"TRUE":1, "FALSE":0})
+    #         self.data[habit] = self.data[habit].map({"TRUE":1, "FALSE":0})
 
 
 
@@ -195,7 +204,7 @@ class HabitTracker:
         """ Get current streak for a habit series (1s and 0s) """
         streak = 0
         for val in series:
-            if val == 0:
+            if val == -1:
                 streak += 1
             else:
                 break
@@ -240,13 +249,18 @@ class HabitTracker:
             content += '</div>'
             content += '<hr>'
 
-        content += '<h2>Habit Data (Last 7 Days)</h2>'
+        content += '<h2>Habit - Last 7 Days</h2>'
 
-        content += self.bars_week[["Habit", "Percent","Bars"]].to_html(
-                                classes='table table-striped table-hover table-bordered table-responsive', 
-                                index=False,
-                                border=0
-                                )
+        # content += self.bars_week[["Habit","Sum", "Percent","Bars"]].to_html(
+        #                         classes='table table-striped table-hover table-bordered table-responsive', 
+        #                         index=False,
+        #                         border=0
+        #                         )
+        # content += self.bars_week[["Habit","Sum"]].to_html(
+        #                         classes='table table-striped table-hover table-bordered table-responsive', 
+        #                         index=False,
+        #                         border=0
+        #                         )
 
         content += '<hr>'
         temp = self.data_week.to_html(
@@ -254,24 +268,31 @@ class HabitTracker:
                                 index=False,
                                 border=0
                                 ) 
-        temp = temp.replace('>0<','>🟥<')
+        temp = temp.replace('>-1<','>🟥<')
+        temp = temp.replace('>0<','>🔲<')
         temp = temp.replace('>1<','>🟩<')
         content += temp
         content += '<hr>'
 
-        content += '<h2>Habit Percents</h2>'
-        content += self.bars_year[["Habit", "Percent","Bars"]].to_html(
-                                classes='table table-striped table-hover table-bordered table-responsive', 
-                                index=False,
-                                border=0
-                                )
+        content += '<h2>Habit - All Data</h2>'
+        # content += self.bars_year[["Habit","Sum", "Percent","Bars"]].to_html(
+        #                         classes='table table-striped table-hover table-bordered table-responsive', 
+        #                         index=False,
+        #                         border=0
+        #                         )
+        # content += self.bars_year[["Habit","Sum"]].to_html(
+        #                         classes='table table-striped table-hover table-bordered table-responsive', 
+        #                         index=False,
+        #                         border=0
+        #                         )
         content += '<hr>'
         temp = self.data.to_html(
                                 classes='table table-striped table-hover table-bordered table-responsive', 
                                 index=False,
                                 border=0
                                 ) 
-        temp = temp.replace('>0<','>🟥<')
+        temp = temp.replace('>-1<','>🟥<')
+        temp = temp.replace('>0<','>🔲<')
         temp = temp.replace('>1<','>🟩<')
         content += temp
         content += '<hr>'
