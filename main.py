@@ -23,6 +23,7 @@ import requests
 import pandas as pd
 pd.set_option("future.no_silent_downcasting", True)
 
+from matplotlib.colors import LinearSegmentedColormap
 
 # data stuff
 import gspread
@@ -73,7 +74,7 @@ class HabitTracker:
         self.gsheet_id = "1-b4xkSDxGgpuiPN-xBg4dkJ9HeA9iGba6kx9MsiieCQ"
 
         self.data = self.get_sheet_data()
-        self.data.drop(columns=['Month','Year'], inplace=True)
+        self.data.drop(columns=['Month','Week','Year','📶'], inplace=True)
         self.data = self.data.sort_values(by="Date", ascending=False)
 
         # print(self.data)
@@ -96,19 +97,58 @@ class HabitTracker:
         self.data_week = self.data[self.data["Date"] >= last_7]
 
         #year bars
-        self.bars_year = self.data[self.habits].sum().reset_index()
-        self.bars_year.columns = ["Habit", "Sum"]
+        # self.bars_year = self.data[self.habits].sum().reset_index()
+        # self.bars_year.columns = ["Habit", "Sum"]
         # self.bars_year["pSum"] = self.bars_year["Sum"].apply(lambda x: max(x,0))
         # self.bars_year['Percent'] = self.bars_year['Sum'].apply(lambda x: f'{ max(x/len(self.data),0):.2f}%')
         # self.bars_year['Bars'] = self.bars_year['pSum'].apply(lambda x: '|' + '█' * math.ceil((x/len(self.data))*25.0) + '░' * math.floor((1.0 - (x/len(self.data)))*25.0) + '|')
 
+
+        
+
+        self.data_summary = []
+        for habit in self.habits:
+            percent = max(self.data.loc[self.data[habit] == 1, habit].count()/len(self.data),0)
+
+            filled = '█' * int(percent*25.0)
+            empty = '░' * (25 - len(filled))
+
+            self.data_summary.append( {
+                "Habit": habit,
+                "Percent": f'{ percent*100.0:.2f}%',
+                "Bar": filled + empty,
+                "✅": int(self.data.loc[self.data[habit] == 1, habit].count()),
+                "⛔": int(self.data.loc[self.data[habit] == -1, habit].count()),
+                "🔲": int(self.data.loc[self.data[habit] == 0, habit].count()),
+            } )
+        self.data_summary = pd.DataFrame(self.data_summary)
+
         #last week bars
-        self.bars_week = self.data_week[self.habits].sum().reset_index()
-        self.bars_week.columns = ["Habit", "Sum"]
+        # self.bars_week = self.data_week[self.habits].sum().reset_index()
+        # self.bars_week.columns = ["Habit", "Sum"]
         # self.bars_week["pSum"] = self.bars_week["Sum"].apply(lambda x: max(x,0))
         # week = min(7.0, len(self.data_week))
         # self.bars_week['Percent'] = self.bars_week['Sum'].apply(lambda x: f'{ x/week:.2f}%')
         # self.bars_week['Bars'] = self.bars_week['pSum'].apply(lambda x: '|' + '█' * math.ceil((x/week)*25.0) + '░'* math.floor((1.0 - (x/week))*25.0) + '|')   
+
+
+
+        self.data_week_summary = []
+        for habit in self.habits:
+            percent = max(self.data_week.loc[self.data_week[habit] == 1, habit].count()/len(self.data_week),0)
+
+            filled = '█' * int(percent*25.0)
+            empty = '░' * (25 - len(filled))
+            
+            self.data_week_summary.append( {
+                "Habit": habit,
+                "Percent": f'{ percent*100.0:.2f}%',
+                "Bar": filled + empty,
+                "✅": int(self.data_week.loc[self.data_week[habit] == 1, habit].count()),
+                "⛔": int(self.data_week.loc[self.data_week[habit] == -1, habit].count()),
+                "🔲": int(self.data_week.loc[self.data_week[habit] == 0, habit].count()),
+            } )
+        self.data_week_summary = pd.DataFrame(self.data_week_summary)
 
         # streaks
         self.streaks = []
@@ -144,6 +184,9 @@ class HabitTracker:
 
 
         # self.data.to_csv(os.path.join(self.dir,'data_year.csv'), index=False)
+
+        # print(self.data_summary)
+        # print(self.data_week_summary)
 
         # print(self.data)
         # print(self.habits)
@@ -209,6 +252,42 @@ class HabitTracker:
             else:
                 break
         return streak
+    
+
+    
+    def table_style(self, df):
+
+        html_temp = (
+                    df
+                    .to_html(
+                        classes='table table-striped table-hover table-bordered table-responsive', 
+                        index=False,
+                        border=0
+                    )
+                )
+
+        # html_temp = html_temp.replace(
+        #     "<table ",
+        #     "<table style='font-family: 'Roboto Mono', ui-monospace, monospace;' "
+        #     )
+        
+        return  html_temp
+
+    def table_style_summary(self, df):
+        cmap_wg = LinearSegmentedColormap.from_list("white_green", ["white",  "#4dff88"])
+        cmap_wr = LinearSegmentedColormap.from_list("white_red", ["white",  "#ff4d4d"])
+        html_temp = (
+                    df.style
+                    .background_gradient(cmap=cmap_wg, subset=["Passed" ])
+                    .background_gradient(cmap=cmap_wr, subset=["Failed" ])
+                    .to_html(
+                        classes='table table-striped table-hover table-bordered table-responsive', 
+                        index=False,
+                        border=0
+                    )
+                )
+        
+        return html_temp
 
     def create_message(self):
         template = ''
@@ -225,8 +304,7 @@ class HabitTracker:
                 content += f'''
                 <tr>
                     <td><b>{habit}</b></td>
-                    <td style="text-align:center">{tier}</td>
-                    <td style="text-align:left">{streak} days</td>
+                    <td style="text-align:left">{streak} days   {tier}</td>
                 </tr>
                 '''
             content += '</table>'
@@ -241,8 +319,7 @@ class HabitTracker:
                 content += f'''
                 <tr>
                     <td><b>{habit}</b></td>
-                    <td style="text-align:center">{tier}</td>
-                    <td style="text-align:left">-{streak} days</td>
+                    <td style="text-align:left">-{streak} days   {tier}</td>
                 </tr>
                 '''
             content += '</table>'
@@ -262,15 +339,14 @@ class HabitTracker:
         #                         border=0
         #                         )
 
+
+        content += self.table_style(self.data_week_summary)
         content += '<hr>'
-        temp = self.data_week.to_html(
-                                classes='table table-striped table-hover table-bordered table-responsive', 
-                                index=False,
-                                border=0
-                                ) 
-        temp = temp.replace('>-1<','>🟥<')
-        temp = temp.replace('>0<','>🔲<')
-        temp = temp.replace('>1<','>🟩<')
+        temp = self.table_style(self.data_week)
+        temp = temp.replace('>-1</td>'," style=\"background-color:#ff4d4d;color:white;\">-1</td>")
+        temp = temp.replace('>0</td>',"  style=\"background-color:#eeeeee;color:black;\">0</td>")
+        temp = temp.replace('>1</td>',"  style=\"background-color:#4dff88;color:black;\">1</td>")
+
         content += temp
         content += '<hr>'
 
@@ -285,15 +361,15 @@ class HabitTracker:
         #                         index=False,
         #                         border=0
         #                         )
+
+        content += self.table_style(self.data_summary)
         content += '<hr>'
-        temp = self.data.to_html(
-                                classes='table table-striped table-hover table-bordered table-responsive', 
-                                index=False,
-                                border=0
-                                ) 
-        temp = temp.replace('>-1<','>🟥<')
-        temp = temp.replace('>0<','>🔲<')
-        temp = temp.replace('>1<','>🟩<')
+        temp = self.table_style(self.data)
+
+        temp = temp.replace('>-1</td>'," style=\"background-color:#ff4d4d;color:white;\">-1</td>")
+        temp = temp.replace('>0</td>',"  style=\"background-color:#eeeeee;color:black;\">0</td>")
+        temp = temp.replace('>1</td>',"  style=\"background-color:#4dff88;color:black;\">1</td>")
+
         content += temp
         content += '<hr>'
 
