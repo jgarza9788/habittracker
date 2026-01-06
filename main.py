@@ -164,6 +164,8 @@ class HabitTracker:
                     tier = '🏆 '
                 if streak >= 15:
                     tier = '🚀 '
+                if streak >= 30:
+                    tier = '⭐⭐⭐ '
                 self.streaks.append((habit, streak, tier))
 
         #negative streaks
@@ -180,6 +182,8 @@ class HabitTracker:
                     tier = '❌ '
                 if neg_streak >= 15:
                     tier = '💀 '
+                if neg_streak >= 30:
+                    tier = '💀💀💀 '
                 self.neg_streaks.append((habit, neg_streak, tier))
 
 
@@ -377,10 +381,13 @@ class HabitTracker:
         return message
 
     def send_email(self):
+        
+        today = datetime.datetime.now().strftime("%Y.%m.%d")
+
         em = EmailMessage()
         em['From'] = self.config.data["from_email"]
         em['To'] = ",".join(self.config.data["to_emails"])
-        em['Subject'] = self.config.data["email_subject"]
+        em['Subject'] = self.config.data["email_subject"].replace("YYYY.MM.DD", today)
 
         body = self.message
         # body = str(self.data)
