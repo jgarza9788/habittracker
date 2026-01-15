@@ -75,6 +75,7 @@ class HabitTracker:
 
         self.data = self.get_sheet_data()
         self.data.drop(columns=['Month','Week','Year','📶'], inplace=True)
+        self.data["Date"] = pd.to_datetime(self.data["Date"], errors="coerce")
         self.data = self.data.sort_values(by="Date", ascending=False)
 
         # print(self.data)
