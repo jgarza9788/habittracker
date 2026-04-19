@@ -74,7 +74,7 @@ class HabitTracker:
         self.gsheet_id = "1-b4xkSDxGgpuiPN-xBg4dkJ9HeA9iGba6kx9MsiieCQ"
 
         self.data = self.get_sheet_data()
-        self.data.drop(columns=['Month','Week','Year','📶'], inplace=True)
+        self.data.drop(columns=['Month','Week','Year','DeltaDay','📶'], inplace=True)
         self.data["Date"] = pd.to_datetime(self.data["Date"], errors="coerce")
         self.data = self.data.sort_values(by="Date", ascending=False)
 
